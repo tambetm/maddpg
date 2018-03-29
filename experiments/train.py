@@ -1,5 +1,4 @@
 import argparse
-import gym
 import numpy as np
 import os
 import tensorflow as tf
@@ -10,7 +9,7 @@ import maddpg.common.tf_util as U
 from maddpg.trainer.maddpg import MADDPGAgentTrainer
 import tensorflow.contrib.layers as layers
 
-def parse_args():
+def parse_args(args=None):
     parser = argparse.ArgumentParser("Reinforcement Learning experiments for multiagent environments")
     # Environment
     parser.add_argument("--scenario", type=str, default="simple", help="name of the scenario script")
@@ -32,20 +31,21 @@ def parse_args():
     # Evaluation
     parser.add_argument("--restore", action="store_true", default=False)
     parser.add_argument("--display", action="store_true", default=False)
+    parser.add_argument("--save-replay", action="store_true", default=False)
+    parser.add_argument("--deterministic", action="store_true", default=False)
     parser.add_argument("--benchmark", action="store_true", default=False)
     parser.add_argument("--benchmark-iters", type=int, default=100000, help="number of iterations run for benchmarking")
     parser.add_argument("--benchmark-dir", type=str, default="./benchmark_files/", help="directory where benchmark data is saved")
     parser.add_argument("--plots-dir", type=str, default="./learning_curves/", help="directory where plot data is saved")
-    return parser.parse_args()
+    return parser.parse_args(args)
 
 def mlp_model(input, num_outputs, scope, reuse=False, num_units=64, rnn_cell=None):
     # This model takes as input an observation and returns values of all actions
     with tf.variable_scope(scope, reuse=reuse):
-        out = input
-        out = layers.fully_connected(out, num_outputs=num_units, activation_fn=tf.nn.relu)
-        out = layers.fully_connected(out, num_outputs=num_units, activation_fn=tf.nn.relu)
-        out = layers.fully_connected(out, num_outputs=num_outputs, activation_fn=None)
-        return out
+        hidden1 = layers.fully_connected(input, num_outputs=num_units, activation_fn=tf.nn.relu)
+        hidden2 = layers.fully_connected(hidden1, num_outputs=num_units, activation_fn=tf.nn.relu)
+        out = layers.fully_connected(hidden2, num_outputs=num_outputs, activation_fn=None)
+        return out, hidden1, hidden2
 
 def make_env(scenario_name, arglist, benchmark=False):
     from multiagent.environment import MultiAgentEnv
@@ -146,6 +146,9 @@ def train(arglist):
                     print('Finished benchmarking, now saving...')
                     with open(file_name, 'wb') as fp:
                         pickle.dump(agent_info[:-1], fp)
+                        if arglist.save_replay:
+                            for i, agent in enumerate(trainers):
+                                pickle.dump(agent.replay_buffer._storage, fp)
                     break
                 continue
 
