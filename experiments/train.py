@@ -126,6 +126,9 @@ def train(arglist):
                 episode_rewards[-1] += rew
                 agent_rewards[i][-1] += rew
 
+            for i, info in enumerate(info_n):
+                agent_info[-1][i].append(info_n['n'])
+
             if done or terminal:
                 obs_n = env.reset()
                 episode_step = 0
@@ -139,9 +142,7 @@ def train(arglist):
 
             # for benchmarking learned policies
             if arglist.benchmark:
-                for i, info in enumerate(info_n):
-                    agent_info[-1][i].append(info_n['n'])
-                if train_step > arglist.benchmark_iters and (done or terminal):
+                if train_step >= arglist.benchmark_iters and (done or terminal):
                     file_name = arglist.benchmark_dir + arglist.exp_name + '.pkl'
                     print('Finished benchmarking, now saving...')
                     with open(file_name, 'wb') as fp:
