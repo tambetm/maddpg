@@ -7,7 +7,7 @@ import pickle
 
 import maddpg.common.tf_util as U
 from maddpg.trainer.maddpg import MADDPGAgentTrainer
-from policy import InteractivePolicy, StupidPolicy
+from policy import InteractivePolicy, SheldonPolicy
 import tensorflow.contrib.layers as layers
 
 def parse_args(args=None):
@@ -31,7 +31,8 @@ def parse_args(args=None):
     parser.add_argument("--load-dir", type=str, default="", help="directory in which training state and model are loaded")
     # Evaluation
     parser.add_argument("--interactive", action="store_true", default=False)
-    parser.add_argument("--interactive_agent", choices=['good', 'adv'], default='good')
+    parser.add_argument("--interactive-agent", choices=['good', 'adv'], default='good')
+    parser.add_argument("--interactive-id", type=int, default=0)
     parser.add_argument("--restore", action="store_true", default=False)
     parser.add_argument("--display", action="store_true", default=False)
     parser.add_argument("--save-replay", action="store_true", default=False)
@@ -70,32 +71,32 @@ def get_trainers(env, num_adversaries, obs_shape_n, arglist):
     model = mlp_model
     trainer = MADDPGAgentTrainer
     for i in range(num_adversaries):
-        if i == 0 and arglist.interactive and arglist.interactive_agent =='adv':
-            trainers.append(StupidPolicy(env, 0))
+        if arglist.interactive and arglist.interactive_agent =='adv' and i == arglist.interactive_id:
+            trainers.append(InteractivePolicy(env, i))
         else:
             trainers.append(trainer(
                 "agent_%d" % i, model, obs_shape_n, env.action_space, i, arglist,
                 local_q_func=(arglist.adv_policy=='ddpg')))
     for i in range(num_adversaries, env.n):
-        if i == num_adversaries and arglist.interactive and arglist.interactive_agent =='good':
-            trainers.append(StupidPolicy(env, 0))
+        if arglist.interactive and arglist.interactive_agent =='good' and i - num_adversaries == arglist.interactive_id:
+            trainers.append(InteractivePolicy(env, i))
         else:
             trainers.append(trainer(
                 "agent_%d" % i, model, obs_shape_n, env.action_space, i, arglist,
                 local_q_func=(arglist.good_policy=='ddpg')))
     return trainers
 
-def mark_interactive_agent(env, num_adversaries, interactive_agent):
-    if interactive_agent == 'adv':
-        agent_id = 0
-    elif interactive_agent == 'good':
-        agent_id = num_adversaries
+def mark_interactive_agent(env, num_adversaries, arglist):
+    if arglist.interactive_agent == 'adv':
+        agent_id = arglist.interactive_id
+    elif arglist.interactive_agent == 'good':
+        agent_id = arglist.interactive_id + num_adversaries
     else:
         assert False
     env.world.agents[agent_id].color = np.array([0.85, 0.35, 0.35])
-    env.world.landmarks[0].color = np.array([0.85, 0.35, 0.35])
+    #env.world.landmarks[0].color = np.array([0.85, 0.35, 0.35])
 
-def interactive(arglist):
+def train(arglist):
     with U.single_threaded_session():
         # Create environment
         env = make_env(arglist.scenario, arglist, arglist.benchmark)
@@ -103,6 +104,7 @@ def interactive(arglist):
         obs_shape_n = [env.observation_space[i].shape for i in range(env.n)]
         num_adversaries = min(env.n, arglist.num_adversaries)
         if arglist.interactive:
+            # create viewers to attach keyboard hooks
             env.render()
         trainers = get_trainers(env, num_adversaries, obs_shape_n, arglist)
         print('Using good policy {} and adv policy {}'.format(arglist.good_policy, arglist.adv_policy))
@@ -124,7 +126,9 @@ def interactive(arglist):
         agent_info = [[[]]]  # placeholder for benchmarking info
         saver = tf.train.Saver()
         obs_n = env.reset()
-        mark_interactive_agent(env, arglist.num_adversaries, arglist.interactive_agent)
+        mark_interactive_agent(env, num_adversaries, arglist)
+        if arglist.display or arglist.interactive:
+            env.render()
         episode_step = 0
         train_step = 0
         t_start = time.time()
@@ -133,6 +137,9 @@ def interactive(arglist):
         while True:
             # get action
             action_n = [agent.action(obs) for agent, obs in zip(trainers,obs_n)]
+            # allow breaking out with ESC
+            if any(a is None for a in action_n):
+                break
             # environment step
             new_obs_n, rew_n, done_n, info_n = env.step(action_n)
             episode_step += 1
@@ -151,9 +158,16 @@ def interactive(arglist):
             for i, info in enumerate(info_n):
                 agent_info[-1][i].append(info_n['n'])
 
+            # for displaying learned policies
+            if arglist.display or arglist.interactive:
+                time.sleep(0.1)
+                env.render()
+
             if done or terminal:
                 obs_n = env.reset()
-                mark_interactive_agent(env, arglist.num_adversaries, arglist.interactive_agent)
+                mark_interactive_agent(env, num_adversaries, arglist)
+                if arglist.display or arglist.interactive:
+                    env.render()
                 episode_step = 0
                 episode_rewards.append(0)
                 for a in agent_rewards:
@@ -175,12 +189,6 @@ def interactive(arglist):
                                 if hasattr(agent, 'replay_buffer'):
                                     pickle.dump(agent.replay_buffer._storage, fp)
                     break
-                continue
-
-            # for displaying learned policies
-            if arglist.display:
-                time.sleep(0.1)
-                env.render()
                 continue
 
             # update all trainers, if not in display or benchmark mode
@@ -220,4 +228,4 @@ def interactive(arglist):
 
 if __name__ == '__main__':
     arglist = parse_args()
-    interactive(arglist)
+    train(arglist)
