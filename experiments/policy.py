@@ -1,6 +1,7 @@
 import numpy as np
 from pyglet.window import key
 from multiagent.policy import Policy
+from maddpg.trainer.replay_buffer import ReplayBuffer
 
 # interactive policy based on keyboard input
 # hard-coded to deal only with movement, not communication
@@ -54,10 +55,12 @@ class InteractivePolicy(Policy):
         if k==key.ESCAPE:self.move[5] = False
 
 class SheldonPolicy(Policy):
-    def __init__(self, env, landmark_id):
+    def __init__(self, env, landmark_id, args):
         super(SheldonPolicy, self).__init__()
         self.env = env
         self.landmark_id = landmark_id
+        # dummy replay buffer for collecting experiences
+        self.replay_buffer = ReplayBuffer(args.num_episodes * args.max_episode_len if args.benchmark and args.save_replay else 1e6)
 
     def action(self, obs):
         delta_pos = obs[(4 + self.landmark_id * 2):(4 + self.landmark_id * 2 + 2)]
@@ -78,3 +81,7 @@ class SheldonPolicy(Policy):
             if delta_pos[1] < 0: u[4] += -delta_pos[1] # DOWN
         #print(delta_pos, u)
         return np.concatenate([u, np.zeros(self.env.world.dim_c)])
+        
+    def experience(self, obs, act, rew, new_obs, done, terminal):
+        # Store transition in the replay buffer.
+        self.replay_buffer.add(obs, act, rew, new_obs, float(done))

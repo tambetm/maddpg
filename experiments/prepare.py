@@ -9,8 +9,8 @@ import tensorflow as tf
 
 parser = argparse.ArgumentParser()
 parser.add_argument("input_file")
-parser.add_argument("policy_file")
-parser.add_argument("output_file")
+parser.add_argument("--policy_file")
+parser.add_argument("--output_file")
 parser.add_argument("--num-units", type=int, default=128)
 args = parser.parse_args()
 
@@ -116,72 +116,74 @@ print("Average agent distance from the closest landmark at the end:",
       np.mean(np.min(np.stack([landmarks1, landmarks2, landmarks3]), axis=-1)))
 print()
 
-arglist = parse_args(['--benchmark', '--deterministic', '--num-units', str(args.num_units)])
+if args.policy_file and args.output_file:
+    arglist = parse_args(['--benchmark', '--deterministic', '--num-units', str(args.num_units)])
 
-#tf.reset_default_graph()
-#tf.InteractiveSession().as_default()
-with tf.Session().as_default():
-    # Create environment
-    env = make_env('simple_spread', arglist, arglist.benchmark)
-    # Create agent trainers
-    obs_shape_n = [env.observation_space[i].shape for i in range(env.n)]
-    num_adversaries = min(env.n, arglist.num_adversaries)
-    trainers = get_trainers(env, num_adversaries, obs_shape_n, arglist)
-    #print('Using good policy {} and adv policy {}'.format(arglist.good_policy, arglist.adv_policy))
+    #tf.reset_default_graph()
+    #tf.InteractiveSession().as_default()
+    with tf.Session().as_default():
+        # Create environment
+        env = make_env('simple_spread', arglist, arglist.benchmark)
+        # Create agent trainers
+        obs_shape_n = [env.observation_space[i].shape for i in range(env.n)]
+        num_adversaries = min(env.n, arglist.num_adversaries)
+        trainers = get_trainers(env, num_adversaries, obs_shape_n, arglist)
+        #print('Using good policy {} and adv policy {}'.format(arglist.good_policy, arglist.adv_policy))
 
-    # Initialize
-    U.initialize()
+        # Initialize
+        U.initialize()
 
-    os.path.splitext(args.input_file)
+        os.path.splitext(args.input_file)
 
-    print('Loading previous state...')
-    U.load_state(args.policy_file)
+        print('Loading previous state...')
+        U.load_state(args.policy_file)
 
-    actions = trainers[0].act(states1[0])
-    assert np.allclose(actions1[0], actions)
-    actions = trainers[1].act(states2[0])
-    assert np.allclose(actions2[0], actions)
-    actions = trainers[2].act(states3[0])
-    assert np.allclose(actions3[0], actions)
+        actions = trainers[0].act(states1[0])
+        assert np.allclose(actions1[0], actions)
+        actions = trainers[1].act(states2[0])
+        assert np.allclose(actions2[0], actions)
+        actions = trainers[2].act(states3[0])
+        assert np.allclose(actions3[0], actions)
 
-    h1_values = trainers[0].p_debug['h1_values']
-    h2_values = trainers[0].p_debug['h2_values']
+        h1_values = trainers[0].p_debug['h1_values']
+        h2_values = trainers[0].p_debug['h2_values']
 
-    X1_h1 = np.array([h1_values(states1[i]) for i in range(states1.shape[0])])
-    X1_h2 = np.array([h2_values(states1[i]) for i in range(states1.shape[0])])
+        X1_h1 = np.array([h1_values(states1[i]) for i in range(states1.shape[0])])
+        X1_h2 = np.array([h2_values(states1[i]) for i in range(states1.shape[0])])
 
-    #print("Agent1 hidden state shapes:", X1_h1.shape, X1_h2.shape)
+        #print("Agent1 hidden state shapes:", X1_h1.shape, X1_h2.shape)
 
-    h1_values = trainers[1].p_debug['h1_values']
-    h2_values = trainers[1].p_debug['h2_values']
+        h1_values = trainers[1].p_debug['h1_values']
+        h2_values = trainers[1].p_debug['h2_values']
 
-    X2_h1 = np.array([h1_values(states2[i]) for i in range(states2.shape[0])])
-    X2_h2 = np.array([h2_values(states2[i]) for i in range(states2.shape[0])])
+        X2_h1 = np.array([h1_values(states2[i]) for i in range(states2.shape[0])])
+        X2_h2 = np.array([h2_values(states2[i]) for i in range(states2.shape[0])])
 
-    #print("Agent2 hidden state shapes:", X1_h1.shape, X1_h2.shape)
+        #print("Agent2 hidden state shapes:", X1_h1.shape, X1_h2.shape)
 
-    h1_values = trainers[2].p_debug['h1_values']
-    h2_values = trainers[2].p_debug['h2_values']
+        h1_values = trainers[2].p_debug['h1_values']
+        h2_values = trainers[2].p_debug['h2_values']
 
-    X3_h1 = np.array([h1_values(states3[i]) for i in range(states3.shape[0])])
-    X3_h2 = np.array([h2_values(states3[i]) for i in range(states3.shape[0])])
+        X3_h1 = np.array([h1_values(states3[i]) for i in range(states3.shape[0])])
+        X3_h2 = np.array([h2_values(states3[i]) for i in range(states3.shape[0])])
 
-    #print("Agent3 hidden state shapes:", X1_h1.shape, X1_h2.shape)
+        #print("Agent3 hidden state shapes:", X1_h1.shape, X1_h2.shape)
 
-np.savez_compressed(args.output_file,
-    X1_obs=states1, 
-    X1_h1=X1_h1, 
-    X1_h2=X1_h2,
-    X1_act=actions1,
-    X2_obs=states2, 
-    X2_h1=X2_h1, 
-    X2_h2=X2_h2,
-    X2_act=actions2,
-    X3_obs=states3, 
-    X3_h1=X3_h1, 
-    X3_h2=X3_h2,
-    X3_act=actions3,
-    y1=y1,
-    y2=y2,
-    y3=y3,
-)
+    np.savez_compressed(args.output_file,
+        X1_obs=states1, 
+        X1_h1=X1_h1, 
+        X1_h2=X1_h2,
+        X1_act=actions1,
+        X2_obs=states2, 
+        X2_h1=X2_h1, 
+        X2_h2=X2_h2,
+        X2_act=actions2,
+        X3_obs=states3, 
+        X3_h1=X3_h1, 
+        X3_h2=X3_h2,
+        X3_act=actions3,
+        y1=y1,
+        y2=y2,
+        y3=y3,
+    )
+

@@ -78,7 +78,7 @@ def get_trainers(env, num_adversaries, obs_shape_n, arglist):
             local_q_func=(arglist.adv_policy=='ddpg')))
     for i in range(num_adversaries, env.n):
         if arglist.num_sheldons > 0 and (i - num_adversaries) in arglist.sheldon_ids:
-            trainers.append(SheldonPolicy(env, arglist.sheldon_targets[i - num_adversaries]))
+            trainers.append(SheldonPolicy(env, arglist.sheldon_targets[arglist.sheldon_ids.index(i - num_adversaries)], arglist))
         else:
             trainers.append(trainer(
                 "agent_%d" % i, model, obs_shape_n, env.action_space, i, arglist,
@@ -145,8 +145,7 @@ def train(arglist):
             terminal = (episode_step >= arglist.max_episode_len)
             # collect experience
             for i, agent in enumerate(trainers):
-                if hasattr(agent, 'experience'):
-                    agent.experience(obs_n[i], action_n[i], rew_n[i], new_obs_n[i], done_n[i], terminal)
+                agent.experience(obs_n[i], action_n[i], rew_n[i], new_obs_n[i], done_n[i], terminal)
             obs_n = new_obs_n
 
             for i, rew in enumerate(rew_n):
@@ -184,8 +183,7 @@ def train(arglist):
                         pickle.dump(agent_info[:-1], fp)
                         if arglist.save_replay:
                             for i, agent in enumerate(trainers):
-                                if hasattr(agent, 'replay_buffer'):
-                                    pickle.dump(agent.replay_buffer._storage, fp)
+                                pickle.dump(agent.replay_buffer._storage, fp)
                     break
                 continue
 
