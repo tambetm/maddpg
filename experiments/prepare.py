@@ -12,6 +12,7 @@ parser.add_argument("input_file")
 parser.add_argument("--policy_file")
 parser.add_argument("--output_file")
 parser.add_argument("--num-units", type=int, default=128)
+parser.add_argument("--shared", action='store_true')
 args = parser.parse_args()
 
 with open(args.input_file, "rb") as fp:
@@ -117,7 +118,10 @@ print("Average agent distance from the closest landmark at the end:",
 print()
 
 if args.policy_file and args.output_file:
-    arglist = parse_args(['--benchmark', '--deterministic', '--num-units', str(args.num_units)])
+    strargs = ['--benchmark', '--deterministic', '--num-units', str(args.num_units)]
+    if args.shared:
+        strargs.append('--shared')
+    arglist = parse_args(strargs)
 
     #tf.reset_default_graph()
     #tf.InteractiveSession().as_default()

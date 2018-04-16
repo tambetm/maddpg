@@ -4,6 +4,7 @@ import os
 import tensorflow as tf
 import time
 import pickle
+import random
 
 import maddpg.common.tf_util as U
 from maddpg.trainer.maddpg import MADDPGAgentTrainer
@@ -22,21 +23,23 @@ def parse_args(args=None):
     parser.add_argument("--lr", type=float, default=1e-2, help="learning rate for Adam optimizer")
     parser.add_argument("--gamma", type=float, default=0.95, help="discount factor")
     parser.add_argument("--batch-size", type=int, default=1024, help="number of episodes to optimize at the same time")
-    parser.add_argument("--num-units", type=int, default=64, help="number of units in the mlp")
+    parser.add_argument("--num-units", type=int, default=128, help="number of units in the mlp")
+    parser.add_argument("--shuffle", action="store_true", default=False, help="shuffle agents at each step")
+    parser.add_argument("--shared", action="store_true", default=False, help="use shared model for all agents")
     # Checkpointing
     parser.add_argument("--exp-name", type=str, default=None, help="name of the experiment")
     parser.add_argument("--save-dir", type=str, default="/tmp/policy/", help="directory in which training state and model should be saved")
     parser.add_argument("--save-rate", type=int, default=1000, help="save model once every time this many episodes are completed")
     parser.add_argument("--load-dir", type=str, default="", help="directory in which training state and model are loaded")
+    parser.add_argument("--restore", action="store_true", default=False, help="restore model from checkpoint")
     # Evaluation
-    parser.add_argument("--restore", action="store_true", default=False)
-    parser.add_argument("--display", action="store_true", default=False)
-    parser.add_argument("--save-replay", action="store_true", default=False)
-    parser.add_argument("--deterministic", action="store_true", default=False)
-    parser.add_argument("--benchmark", action="store_true", default=False)
+    parser.add_argument("--display", action="store_true", default=False, help="render environment")
+    parser.add_argument("--benchmark", action="store_true", default=False, help="run evaluation")
     parser.add_argument("--benchmark-iters", type=int, default=100000, help="number of iterations run for benchmarking")
     parser.add_argument("--benchmark-dir", type=str, default="./benchmark_files/", help="directory where benchmark data is saved")
     parser.add_argument("--plots-dir", type=str, default="./learning_curves/", help="directory where plot data is saved")
+    parser.add_argument("--save-replay", action="store_true", default=False, help="save replay memory contents along with benchmark data")
+    parser.add_argument("--deterministic", action="store_true", default=False, help="use deterministic policy during benchmarking")
     return parser.parse_args(args)
 
 def mlp_model(input, num_outputs, scope, reuse=False, num_units=64, rnn_cell=None):
@@ -68,12 +71,16 @@ def get_trainers(env, num_adversaries, obs_shape_n, arglist):
     trainer = MADDPGAgentTrainer
     for i in range(num_adversaries):
         trainers.append(trainer(
-            "agent_%d" % i, model, obs_shape_n, env.action_space, i, arglist,
-            local_q_func=(arglist.adv_policy=='ddpg')))
+            "bad" if arglist.shared else "agent_%d" % i,
+            model, obs_shape_n, env.action_space, i, arglist,
+            local_q_func=(arglist.adv_policy=='ddpg'),
+            reuse=tf.AUTO_REUSE if arglist.shared else False))
     for i in range(num_adversaries, env.n):
         trainers.append(trainer(
-            "agent_%d" % i, model, obs_shape_n, env.action_space, i, arglist,
-            local_q_func=(arglist.good_policy=='ddpg')))
+            "good" if arglist.shared else "agent_%d" % i,
+            model, obs_shape_n, env.action_space, i, arglist,
+            local_q_func=(arglist.good_policy=='ddpg'),
+            reuse=tf.AUTO_REUSE if arglist.shared else False))
     return trainers
 
 
@@ -110,6 +117,9 @@ def train(arglist):
 
         print('Starting iterations...')
         while True:
+            # shuffle agents to prevent them from learning fixed strategy
+            if arglist.shuffle:
+                random.shuffle(trainers)
             # get action
             action_n = [agent.action(obs) for agent, obs in zip(trainers,obs_n)]
             # environment step
@@ -128,6 +138,11 @@ def train(arglist):
 
             for i, info in enumerate(info_n):
                 agent_info[-1][i].append(info_n['n'])
+
+            # for displaying learned policies
+            if arglist.display:
+                time.sleep(0.1)
+                env.render()
 
             if done or terminal:
                 obs_n = env.reset()
@@ -151,12 +166,6 @@ def train(arglist):
                             for i, agent in enumerate(trainers):
                                 pickle.dump(agent.replay_buffer._storage, fp)
                     break
-                continue
-
-            # for displaying learned policies
-            if arglist.display:
-                time.sleep(0.1)
-                env.render()
                 continue
 
             # update all trainers, if not in display or benchmark mode

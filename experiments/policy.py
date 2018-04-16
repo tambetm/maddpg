@@ -80,7 +80,8 @@ class SheldonPolicy(Policy):
             if delta_pos[1] > 0: u[3] += delta_pos[1]  # UP
             if delta_pos[1] < 0: u[4] += -delta_pos[1] # DOWN
         #print(delta_pos, u)
-        return np.concatenate([u, np.zeros(self.env.world.dim_c)])
+        #return np.concatenate([u, np.zeros(self.env.world.dim_c)])
+        return u
         
     def experience(self, obs, act, rew, new_obs, done, terminal):
         # Store transition in the replay buffer.
