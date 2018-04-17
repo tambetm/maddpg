@@ -12,9 +12,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("input_file")
 parser.add_argument("--policy_file")
 parser.add_argument("--output_file")
-parser.add_argument("--num-units", type=int, default=128)
-parser.add_argument("--shared", action='store_true')
-args = parser.parse_args()
+args, unknown_args = parser.parse_known_args()
 
 with open(args.input_file, "rb") as fp:
     data = pickle.load(fp)
@@ -124,9 +122,7 @@ print("Average agent distance from the closest landmark at the end:",
 print()
 
 if args.policy_file and args.output_file:
-    strargs = ['--benchmark', '--deterministic', '--num-units', str(args.num_units)]
-    if args.shared:
-        strargs.append('--shared')
+    strargs = ['--benchmark', '--deterministic'] + unknown_args
     arglist = parse_args(strargs)
 
     #tf.reset_default_graph()
@@ -150,7 +146,8 @@ if args.policy_file and args.output_file:
 
         agent_ids = np.array([replay[i][5] for i in range(len(replay))]).reshape((-1, 25, 3))
 
-        actions = trainers[0][int(agent_ids[0, 0, 0])].act(states1[0])
+        
+        actions = trainers[0][agent_ids[0, 0, 0]].act(states1[0])
         assert np.allclose(actions1[0], actions)
         actions = trainers[1][agent_ids[0, 0, 1]].act(states2[0])
         assert np.allclose(actions2[0], actions)

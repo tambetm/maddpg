@@ -4,11 +4,11 @@ import os
 import tensorflow as tf
 import time
 import pickle
-import random
 
 import maddpg.common.tf_util as U
 from maddpg.trainer.maddpg_ensemble import MADDPGAgentTrainer
 from maddpg.trainer.replay_buffer_ensemble import ReplayBuffer
+from policy import SheldonPolicy
 import tensorflow.contrib.layers as layers
 
 def parse_args(args=None):
@@ -42,7 +42,10 @@ def parse_args(args=None):
     parser.add_argument("--plots-dir", type=str, default="./learning_curves/", help="directory where plot data is saved")
     parser.add_argument("--save-replay", action="store_true", default=False, help="save replay memory contents along with benchmark data")
     parser.add_argument("--deterministic", action="store_true", default=False, help="use deterministic policy during benchmarking")
-    return parser.parse_args(args)
+    parser.add_argument("--num-sheldons", type=int, default=0)
+    parser.add_argument("--sheldon-ids", type=int, nargs='+')
+    parser.add_argument("--sheldon-targets", type=int, nargs='+')
+    return parser.parse_known_args(args)[0]
 
 def mlp_model(input, num_outputs, scope, reuse=False, num_units=64, rnn_cell=None):
     # This model takes as input an observation and returns values of all actions
@@ -91,11 +94,23 @@ def get_trainers(env, num_adversaries, obs_shape_n, arglist):
         trainers.append(ensemble)
     return trainers
 
+def mark_sheldon_agents(env, arglist):
+    colors = [
+        np.array([0.85, 0.35, 0.35]),
+        np.array([0.35, 0.85, 0.35]),
+        np.array([0.35, 0.35, 0.85])
+    ]
+    for i in range(arglist.num_sheldons):
+        agent_id = arglist.sheldon_ids[i]
+        env.world.agents[agent_id].color = colors[i]
+        landmark_id = arglist.sheldon_targets[i]
+        env.world.landmarks[landmark_id].color = colors[i]
+
 def train(arglist):
     with U.single_threaded_session():
         # Create environment
         env = make_env(arglist.scenario, arglist, arglist.benchmark)
-
+        
         # Create experience buffer
         replay_buffer = ReplayBuffer(arglist.num_episodes * arglist.max_episode_len if arglist.benchmark and arglist.save_replay else 1e6)
         min_replay_buffer_len = arglist.batch_size * arglist.max_episode_len
@@ -123,6 +138,9 @@ def train(arglist):
         agent_info = [[[]]]  # placeholder for benchmarking info
         saver = tf.train.Saver()
         obs_n = env.reset()
+        mark_sheldon_agents(env, arglist)
+        if arglist.display:
+            env.render()
         episode_step = 0
         train_step = 0
         t_start = time.time()
@@ -162,6 +180,9 @@ def train(arglist):
 
             if done or terminal:
                 obs_n = env.reset()
+                mark_sheldon_agents(env, arglist)
+                if arglist.display:
+                    env.render()
                 episode_step = 0
                 episode_rewards.append(0)
                 for a in agent_rewards:
