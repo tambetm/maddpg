@@ -4,10 +4,11 @@ import os
 import tensorflow as tf
 import time
 import pickle
+import random
 
 import maddpg.common.tf_util as U
-from maddpg.trainer.maddpg import MADDPGAgentTrainer
-from policy import SheldonPolicy
+from maddpg.trainer.maddpg_ensemble import MADDPGAgentTrainer
+from maddpg.trainer.replay_buffer_ensemble import ReplayBuffer
 import tensorflow.contrib.layers as layers
 
 def parse_args(args=None):
@@ -19,11 +20,13 @@ def parse_args(args=None):
     parser.add_argument("--num-adversaries", type=int, default=0, help="number of adversaries")
     parser.add_argument("--good-policy", type=str, default="maddpg", help="policy for good agents")
     parser.add_argument("--adv-policy", type=str, default="maddpg", help="policy of adversaries")
+    parser.add_argument("--ensemble-size", type=int, default=3, help="ensemble size")
     # Core training parameters
     parser.add_argument("--lr", type=float, default=1e-2, help="learning rate for Adam optimizer")
     parser.add_argument("--gamma", type=float, default=0.95, help="discount factor")
     parser.add_argument("--batch-size", type=int, default=1024, help="number of episodes to optimize at the same time")
     parser.add_argument("--num-units", type=int, default=128, help="number of units in the mlp")
+    parser.add_argument("--shuffle", action="store_true", default=False, help="shuffle agents at each step")
     parser.add_argument("--shared", action="store_true", default=False, help="use shared model for all agents")
     # Checkpointing
     parser.add_argument("--exp-name", type=str, default=None, help="name of the experiment")
@@ -39,10 +42,7 @@ def parse_args(args=None):
     parser.add_argument("--plots-dir", type=str, default="./learning_curves/", help="directory where plot data is saved")
     parser.add_argument("--save-replay", action="store_true", default=False, help="save replay memory contents along with benchmark data")
     parser.add_argument("--deterministic", action="store_true", default=False, help="use deterministic policy during benchmarking")
-    parser.add_argument("--num-sheldons", type=int, default=0)
-    parser.add_argument("--sheldon-ids", type=int, nargs='+')
-    parser.add_argument("--sheldon-targets", type=int, nargs='+')
-    return parser.parse_known_args(args)[0]
+    return parser.parse_args(args)
 
 def mlp_model(input, num_outputs, scope, reuse=False, num_units=64, rnn_cell=None):
     # This model takes as input an observation and returns values of all actions
@@ -71,41 +71,35 @@ def get_trainers(env, num_adversaries, obs_shape_n, arglist):
     trainers = []
     model = mlp_model
     trainer = MADDPGAgentTrainer
-    assert arglist.num_sheldons == len(arglist.sheldon_ids)
-    assert arglist.num_sheldons == len(arglist.sheldon_targets)
     for i in range(num_adversaries):
-        trainers.append(trainer(
-            "bad" if arglist.shared else "agent_%d" % i,
-            model, obs_shape_n, env.action_space, i, arglist,
-            local_q_func=(arglist.adv_policy=='ddpg'),
-            reuse=tf.AUTO_REUSE if arglist.shared else False))
+        ensemble = []
+        for j in range(arglist.ensemble_size):
+            ensemble.append(trainer(
+                "bad" if arglist.shared else "agent_%d_%d" % (i, j),
+                model, obs_shape_n, env.action_space, i, arglist,
+                local_q_func=(arglist.adv_policy=='ddpg'),
+                reuse=tf.AUTO_REUSE if arglist.shared else False))
+        trainers.append(ensemble)
     for i in range(num_adversaries, env.n):
-        if arglist.num_sheldons > 0 and (i - num_adversaries) in arglist.sheldon_ids:
-            trainers.append(SheldonPolicy(env, arglist.sheldon_targets[arglist.sheldon_ids.index(i - num_adversaries)], arglist))
-        else:
-            trainers.append(trainer(
-                "good" if arglist.shared else "agent_%d" % i,
+        ensemble = []
+        for j in range(arglist.ensemble_size):
+            ensemble.append(trainer(
+                "good" if arglist.shared else "agent_%d_%d" % (i, j),
                 model, obs_shape_n, env.action_space, i, arglist,
                 local_q_func=(arglist.good_policy=='ddpg'),
                 reuse=tf.AUTO_REUSE if arglist.shared else False))
+        trainers.append(ensemble)
     return trainers
-
-def mark_sheldon_agents(env, arglist):
-    colors = [
-        np.array([0.85, 0.35, 0.35]),
-        np.array([0.35, 0.85, 0.35]),
-        np.array([0.35, 0.35, 0.85])
-    ]
-    for i in range(arglist.num_sheldons):
-        agent_id = arglist.sheldon_ids[i]
-        env.world.agents[agent_id].color = colors[i]
-        landmark_id = arglist.sheldon_targets[i]
-        env.world.landmarks[landmark_id].color = colors[i]
 
 def train(arglist):
     with U.single_threaded_session():
         # Create environment
         env = make_env(arglist.scenario, arglist, arglist.benchmark)
+
+        # Create experience buffer
+        replay_buffer = ReplayBuffer(arglist.num_episodes * arglist.max_episode_len if arglist.benchmark and arglist.save_replay else 1e6)
+        min_replay_buffer_len = arglist.batch_size * arglist.max_episode_len
+
         # Create agent trainers
         obs_shape_n = [env.observation_space[i].shape for i in range(env.n)]
         num_adversaries = min(env.n, arglist.num_adversaries)
@@ -129,25 +123,27 @@ def train(arglist):
         agent_info = [[[]]]  # placeholder for benchmarking info
         saver = tf.train.Saver()
         obs_n = env.reset()
-        mark_sheldon_agents(env, arglist)
-        if arglist.display:
-            env.render()
         episode_step = 0
         train_step = 0
         t_start = time.time()
+        # shuffle trainers to prevent them from learning fixed strategy
+        if arglist.shuffle:
+            random.shuffle(trainers)
+        # pick random agent from ensemble for each episode
+        agent_ids = np.random.randint(arglist.ensemble_size, size=len(trainers))
+        agents = [trainers[i][agent_id] for i, agent_id in enumerate(agent_ids)]
 
         print('Starting iterations...')
         while True:
             # get action
-            action_n = [agent.action(obs) for agent, obs in zip(trainers,obs_n)]
+            action_n = [agent.action(obs) for agent, obs in zip(agents,obs_n)]
             # environment step
             new_obs_n, rew_n, done_n, info_n = env.step(action_n)
             episode_step += 1
             done = all(done_n)
             terminal = (episode_step >= arglist.max_episode_len)
             # collect experience
-            for i, agent in enumerate(trainers):
-                agent.experience(obs_n[i], action_n[i], rew_n[i], new_obs_n[i], done_n[i], terminal)
+            replay_buffer.add(obs_n, action_n, rew_n, new_obs_n, done_n, agent_ids)
             obs_n = new_obs_n
 
             for i, rew in enumerate(rew_n):
@@ -164,14 +160,17 @@ def train(arglist):
 
             if done or terminal:
                 obs_n = env.reset()
-                mark_sheldon_agents(env, arglist)
-                if arglist.display:
-                    env.render()
                 episode_step = 0
                 episode_rewards.append(0)
                 for a in agent_rewards:
                     a.append(0)
                 agent_info.append([[]])
+                # shuffle trainers to prevent them from learning fixed strategy
+                if arglist.shuffle:
+                    random.shuffle(trainers)
+                # pick random agent from ensemble for each episode
+                agent_ids = np.random.randint(arglist.ensemble_size, size=len(trainers))
+                agents = [trainers[i][agent_id] for i, agent_id in enumerate(agent_ids)]
 
             # increment global step counter
             train_step += 1
@@ -184,17 +183,24 @@ def train(arglist):
                     with open(file_name, 'wb') as fp:
                         pickle.dump(agent_info[:-1], fp)
                         if arglist.save_replay:
-                            for i, agent in enumerate(trainers):
-                                pickle.dump(agent.replay_buffer._storage, fp)
+                            pickle.dump(replay_buffer._storage, fp)
                     break
                 continue
 
             # update all trainers, if not in display or benchmark mode
-            loss = None
-            for agent in trainers:
-                agent.preupdate()
-            for agent in trainers:
-                loss = agent.update(trainers, train_step)
+            # replay buffer is not large enough
+            # only update every 100 steps
+            if len(replay_buffer) >= min_replay_buffer_len and train_step % 100 == 0:  
+                for i, ensemble in enumerate(trainers):
+                    for agent in ensemble:
+                        # sample different batch for each agent in ensemble
+                        batch_obs_n, batch_act_n, batch_rew_n, batch_obs_next_n, batch_done_n, batch_agent_ids = replay_buffer.sample(arglist.batch_size)
+                        batch_obs_n = [batch_obs_n[:, j] for j in range(batch_obs_n.shape[1])]
+                        batch_act_n = [batch_act_n[:, j] for j in range(batch_act_n.shape[1])]
+                        batch_obs_next_n = [batch_obs_next_n[:, j] for j in range(batch_obs_next_n.shape[1])]
+                        # choose random agent from ensemble for target action
+                        batch_agents = [random.choice(ensemble) for ensemble in trainers]
+                        loss = agent.update(batch_agents, batch_obs_n, batch_act_n, batch_rew_n[:, i], batch_obs_next_n, batch_done_n[:, i])
 
             # save model, display training output
             if terminal and (len(episode_rewards) % arglist.save_rate == 0):

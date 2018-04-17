@@ -2,6 +2,8 @@ import numpy as np
 from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.preprocessing import StandardScaler
 from sklearn.neural_network import MLPClassifier
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import argparse
 
@@ -55,7 +57,7 @@ y2 = data['y2']
 y3 = data['y3']
 
 # calculate accuracies
-acc = np.empty((3, 3, 25, 5, 2))
+acc = np.empty((3, 3, 25, 4, 2))
 for i in range(3):
     for j in range(3):
         for t in range(25):
@@ -64,7 +66,7 @@ for i in range(3):
             acc[i, j, t, 1] = train_and_test_timestep(data['X%d_h1' % (i + 1)], data['y%d' % (j + 1)], t)
             acc[i, j, t, 2] = train_and_test_timestep(data['X%d_h2' % (i + 1)], data['y%d' % (j + 1)], t)
             acc[i, j, t, 3] = train_and_test_timestep(data['X%d_act' % (i + 1)], data['y%d' % (j + 1)], t)
-            acc[i, j, t, 4] = train_and_test_timestep(np.random.randn(*data['X%d_h1' % (i + 1)].shape), data['y%d' % (j + 1)], t)
+            #acc[i, j, t, 4] = train_and_test_timestep(np.random.randn(*data['X%d_h1' % (i + 1)].shape), data['y%d' % (j + 1)], t)
             print(acc[i, j, t, :, 1])
 
 plt.figure(figsize=(24, 18))
@@ -72,8 +74,9 @@ for i in range(3):
     for j in range(3):
         plt.subplot(3, 3, i*3 + j + 1)
         plt.plot(acc[i, j, :, :, 1])
+        plt.ylim(0, 1)
         plt.ylabel('Accuracy')
         plt.xlabel('Timesteps')
         plt.title('Agent %d predicts agent %d%s final landmark' % (i + 1, j + 1, ' (own)' if i == j else ''))
-        plt.legend(['observation', 'hidden 1', 'hidden 2', 'action', 'noise'], loc='upper left')
+        plt.legend(['observation', 'hidden 1', 'hidden 2', 'action'], loc='upper left')
 plt.savefig(args.output_file)

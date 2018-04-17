@@ -1,5 +1,4 @@
 import numpy as np
-from pyglet.window import key
 from multiagent.policy import Policy
 from maddpg.trainer.replay_buffer import ReplayBuffer
 
@@ -40,6 +39,7 @@ class InteractivePolicy(Policy):
 
     # keyboard event callbacks
     def key_press(self, k, mod):
+        from pyglet.window import key
         if k==key.LEFT:  self.move[0] = True
         if k==key.RIGHT: self.move[1] = True
         if k==key.UP:    self.move[2] = True
@@ -47,6 +47,7 @@ class InteractivePolicy(Policy):
         if k==key.SPACE: self.move[4] = True
         if k==key.ESCAPE:self.move[5] = True
     def key_release(self, k, mod):
+        from pyglet.window import key
         if k==key.LEFT:  self.move[0] = False
         if k==key.RIGHT: self.move[1] = False
         if k==key.UP:    self.move[2] = False

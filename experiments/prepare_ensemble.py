@@ -2,8 +2,9 @@ import pickle
 import numpy as np
 import argparse
 import os.path
+import random
 
-from train import parse_args, make_env, get_trainers
+from ensemble import parse_args, make_env, get_trainers
 import maddpg.common.tf_util as U
 import tensorflow as tf
 
@@ -11,13 +12,13 @@ parser = argparse.ArgumentParser()
 parser.add_argument("input_file")
 parser.add_argument("--policy_file")
 parser.add_argument("--output_file")
-args, unknown_args = parser.parse_known_args()
+parser.add_argument("--num-units", type=int, default=128)
+parser.add_argument("--shared", action='store_true')
+args = parser.parse_args()
 
 with open(args.input_file, "rb") as fp:
     data = pickle.load(fp)
-    agent1 = pickle.load(fp)
-    agent2 = pickle.load(fp)
-    agent3 = pickle.load(fp)
+    replay = pickle.load(fp)
 
 print("Number of episodes:", len(data))
 #print("Something something:", len(data[0]))
@@ -31,17 +32,24 @@ assert len(data[0][0]) == 25        # episode length
 assert len(data[0][0][0]) == 3      # num agents
 assert len(data[0][0][0][0]) == 4   # performance data items
 
-assert len(agent1) == len(agent2) == len(agent3) == len(data) * 25
-assert len(agent1[0]) == len(agent2[0]) == len(agent3[0]) == 5
+assert len(replay) == len(data) * 25
+assert len(replay[0]) == 6
+assert len(replay[0][0]) == 3
+assert len(replay[0][0][0]) == 18
+assert len(replay[0][1][0]) == 5
+assert type(replay[0][2][0]) is np.float64
+assert len(replay[0][3][0]) == 18
+assert type(replay[0][4][0]) is bool
+assert len(replay[0][5]) == 3
 
-states1 = np.array([agent1[i][0] for i in range(len(agent1))]).reshape((-1, 25, len(agent1[0][0])))
-states2 = np.array([agent2[i][0] for i in range(len(agent2))]).reshape((-1, 25, len(agent2[0][0])))
-states3 = np.array([agent3[i][0] for i in range(len(agent3))]).reshape((-1, 25, len(agent3[0][0])))
+states1 = np.array([replay[i][0][0] for i in range(len(replay))]).reshape((-1, 25, 18))
+states2 = np.array([replay[i][0][1] for i in range(len(replay))]).reshape((-1, 25, 18))
+states3 = np.array([replay[i][0][2] for i in range(len(replay))]).reshape((-1, 25, 18))
 #print("State shapes:", states1.shape, states2.shape, states3.shape)
 
-actions1 = np.array([agent1[i][1] for i in range(len(agent1))]).reshape((-1, 25, len(agent1[0][1])))
-actions2 = np.array([agent2[i][1] for i in range(len(agent2))]).reshape((-1, 25, len(agent2[0][1])))
-actions3 = np.array([agent3[i][1] for i in range(len(agent3))]).reshape((-1, 25, len(agent3[0][1])))
+actions1 = np.array([replay[i][1][0] for i in range(len(replay))]).reshape((-1, 25, 5))
+actions2 = np.array([replay[i][1][1] for i in range(len(replay))]).reshape((-1, 25, 5))
+actions3 = np.array([replay[i][1][2] for i in range(len(replay))]).reshape((-1, 25, 5))
 #print("Action shapes:", actions1.shape, actions2.shape, actions3.shape)
 
 #rewards1 = np.array([agent1[i][2] for i in range(len(agent1))]).reshape((-1, 25))
@@ -71,10 +79,10 @@ print("- zero landmarks covered", np.sum(occupied1 == 0))
 print()
 '''
 
-new_states1 = np.array([agent1[i][3] for i in range(len(agent1))]).reshape((-1, 25, len(agent1[0][3])))
-new_states2 = np.array([agent2[i][3] for i in range(len(agent2))]).reshape((-1, 25, len(agent2[0][3])))
-new_states3 = np.array([agent3[i][3] for i in range(len(agent3))]).reshape((-1, 25, len(agent3[0][3])))
-#print("New state shapes:", states1.shape, states2.shape, states3.shape)
+new_states1 = np.array([replay[i][3][0] for i in range(len(replay))]).reshape((-1, 25, 18))
+new_states2 = np.array([replay[i][3][1] for i in range(len(replay))]).reshape((-1, 25, 18))
+new_states3 = np.array([replay[i][3][2] for i in range(len(replay))]).reshape((-1, 25, 18))
+print("New state shapes:", states1.shape, states2.shape, states3.shape)
 
 # calculate distance of each agent from each landmark
 landmarks1 = np.sqrt(np.sum(new_states1[:,-1,4:10].reshape((new_states1.shape[0], 3, 2))**2, axis=-1))
@@ -116,7 +124,9 @@ print("Average agent distance from the closest landmark at the end:",
 print()
 
 if args.policy_file and args.output_file:
-    strargs = ['--benchmark', '--deterministic'] + unknown_args
+    strargs = ['--benchmark', '--deterministic', '--num-units', str(args.num_units)]
+    if args.shared:
+        strargs.append('--shared')
     arglist = parse_args(strargs)
 
     #tf.reset_default_graph()
@@ -138,34 +148,27 @@ if args.policy_file and args.output_file:
         print('Loading previous state...')
         U.load_state(args.policy_file)
 
-        actions = trainers[0].act(states1[0])
+        agent_ids = np.array([replay[i][5] for i in range(len(replay))]).reshape((-1, 25, 3))
+
+        actions = trainers[0][int(agent_ids[0, 0, 0])].act(states1[0])
         assert np.allclose(actions1[0], actions)
-        actions = trainers[1].act(states2[0])
+        actions = trainers[1][agent_ids[0, 0, 1]].act(states2[0])
         assert np.allclose(actions2[0], actions)
-        actions = trainers[2].act(states3[0])
+        actions = trainers[2][agent_ids[0, 0, 2]].act(states3[0])
         assert np.allclose(actions3[0], actions)
 
-        h1_values = trainers[0].p_debug['h1_values']
-        h2_values = trainers[0].p_debug['h2_values']
-
-        X1_h1 = np.array([h1_values(states1[i]) for i in range(states1.shape[0])])
-        X1_h2 = np.array([h2_values(states1[i]) for i in range(states1.shape[0])])
+        X1_h1 = np.array([trainers[0][agent_ids[i, 0, 0]].p_debug['h1_values'](states1[i]) for i in range(states1.shape[0])])
+        X1_h2 = np.array([trainers[0][agent_ids[i, 0, 0]].p_debug['h2_values'](states1[i]) for i in range(states1.shape[0])])
 
         #print("Agent1 hidden state shapes:", X1_h1.shape, X1_h2.shape)
 
-        h1_values = trainers[1].p_debug['h1_values']
-        h2_values = trainers[1].p_debug['h2_values']
-
-        X2_h1 = np.array([h1_values(states2[i]) for i in range(states2.shape[0])])
-        X2_h2 = np.array([h2_values(states2[i]) for i in range(states2.shape[0])])
+        X2_h1 = np.array([trainers[1][agent_ids[i, 0, 1]].p_debug['h1_values'](states2[i]) for i in range(states2.shape[0])])
+        X2_h2 = np.array([trainers[1][agent_ids[i, 0, 1]].p_debug['h2_values'](states2[i]) for i in range(states2.shape[0])])
 
         #print("Agent2 hidden state shapes:", X1_h1.shape, X1_h2.shape)
 
-        h1_values = trainers[2].p_debug['h1_values']
-        h2_values = trainers[2].p_debug['h2_values']
-
-        X3_h1 = np.array([h1_values(states3[i]) for i in range(states3.shape[0])])
-        X3_h2 = np.array([h2_values(states3[i]) for i in range(states3.shape[0])])
+        X3_h1 = np.array([trainers[2][agent_ids[i, 0, 2]].p_debug['h1_values'](states3[i]) for i in range(states3.shape[0])])
+        X3_h2 = np.array([trainers[2][agent_ids[i, 0, 2]].p_debug['h2_values'](states3[i]) for i in range(states3.shape[0])])
 
         #print("Agent3 hidden state shapes:", X1_h1.shape, X1_h2.shape)
 
