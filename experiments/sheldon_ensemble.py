@@ -86,11 +86,14 @@ def get_trainers(env, num_adversaries, obs_shape_n, arglist):
     for i in range(num_adversaries, env.n):
         ensemble = []
         for j in range(arglist.ensemble_size):
-            ensemble.append(trainer(
-                "good" if arglist.shared else "agent_%d_%d" % (i, j),
-                model, obs_shape_n, env.action_space, i, arglist,
-                local_q_func=(arglist.good_policy=='ddpg'),
-                reuse=tf.AUTO_REUSE if arglist.shared else False))
+            if arglist.num_sheldons > 0 and (i - num_adversaries) in arglist.sheldon_ids:
+                ensemble.append(SheldonPolicy(env, arglist.sheldon_targets[arglist.sheldon_ids.index(i - num_adversaries)], arglist))
+            else:
+                ensemble.append(trainer(
+                    "good" if arglist.shared else "agent_%d_%d" % (i, j),
+                    model, obs_shape_n, env.action_space, i, arglist,
+                    local_q_func=(arglist.good_policy=='ddpg'),
+                    reuse=tf.AUTO_REUSE if arglist.shared else False))
         trainers.append(ensemble)
     return trainers
 
