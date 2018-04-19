@@ -6,10 +6,11 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import argparse
+import pickle
 
 
 def train_and_test_timestep(X, y, t):
-    # only episodes where the other agent covers just one landmark 
+    # only episodes where the other agent covers just one landmark
     idx = np.where(np.sum(y, axis=-1) == 1)[0]
     X = X[idx, t]
     y = y[idx]
@@ -60,15 +61,17 @@ y3 = data['y3']
 acc = np.empty((3, 3, 25, 4, 2))
 for i in range(3):
     for j in range(3):
+        print(i, j, end=' ')
         for t in range(25):
-            print(i, j, t, end=' ')
+            #print(i, j, t, end=' ')
             acc[i, j, t, 0] = train_and_test_timestep(data['X%d_obs' % (i + 1)], data['y%d' % (j + 1)], t)
             acc[i, j, t, 1] = train_and_test_timestep(data['X%d_h1' % (i + 1)], data['y%d' % (j + 1)], t)
             acc[i, j, t, 2] = train_and_test_timestep(data['X%d_h2' % (i + 1)], data['y%d' % (j + 1)], t)
             acc[i, j, t, 3] = train_and_test_timestep(data['X%d_act' % (i + 1)], data['y%d' % (j + 1)], t)
             #acc[i, j, t, 4] = train_and_test_timestep(np.random.randn(*data['X%d_h1' % (i + 1)].shape), data['y%d' % (j + 1)], t)
-            print(acc[i, j, t, :, 1])
+            #print(acc[i, j, t, :, 1])
 
+np.save('accuraccy_figure4.npy', acc)
 plt.figure(figsize=(24, 18))
 for i in range(3):
     for j in range(3):
