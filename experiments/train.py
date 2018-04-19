@@ -180,6 +180,9 @@ def train(arglist):
                 agent.preupdate()
             for agent in agents:
                 loss = agent.update(agents, train_step)
+                # if shared model, train only once
+                if arglist.shared:
+                    break
 
             # save model, display training output
             if terminal and (len(episode_rewards) % arglist.save_rate == 0):
