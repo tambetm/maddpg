@@ -9,6 +9,8 @@ import maddpg.common.tf_util as U
 from maddpg.trainer.maddpg import MADDPGAgentTrainer
 from policy import SheldonPolicy
 import tensorflow.contrib.layers as layers
+import skvideo.io
+from Video import AddTextToImage,FixPosition
 
 def parse_args(args=None):
     parser = argparse.ArgumentParser("Reinforcement Learning experiments for multiagent environments")
@@ -42,6 +44,7 @@ def parse_args(args=None):
     parser.add_argument("--num-sheldons", type=int, default=0)
     parser.add_argument("--sheldon-ids", type=int, nargs='+')
     parser.add_argument("--sheldon-targets", type=int, nargs='+')
+    parser.add_argument("--record",default=False,help="record video file, Add video path + name to activate")
     return parser.parse_known_args(args)[0]
 
 def mlp_model(input, num_outputs, scope, reuse=False, num_units=64, rnn_cell=None):
@@ -137,6 +140,8 @@ def train(arglist):
         t_start = time.time()
 
         print('Starting iterations...')
+        if (arglist.record!=False):
+            writer = skvideo.io.FFmpegWriter("{}.avi".format(arglist.record))
         while True:
             # get action
             action_n = [agent.action(obs) for agent, obs in zip(trainers,obs_n)]
@@ -158,11 +163,21 @@ def train(arglist):
                 agent_info[-1][i].append(info_n['n'])
 
             # for displaying learned policies
-            if arglist.display:
-                time.sleep(0.1)
-                env.render()
+                x = env.render(mode='rgb_array')
+                if (arglist.record!=False):
+                    LM = [ag.state.p_pos for ag in env.world.landmarks]
+                    LM = [FixPosition(j,10,10) for j in LM]
+                    AP = [ag.state.p_pos for ag in env.agents]
+                    AP = [FixPosition(j) for j in AP]
+                    img = np.copy(x[0])
+                    img = AddTextToImage(img,text=['Agent','Sheldon{}','Sheldon{}'],color=(0,0,255),pos=AP)
+                    img = AddTextToImage(img,text=['LM{}','LM{}','LM{}'],pos=LM,color=(255,0,0))
+                    writer.writeFrame(img)
 
             if done or terminal:
+                if (arglist.record!=False):
+                    writer.close()
+                    exit()
                 obs_n = env.reset()
                 mark_sheldon_agents(env, arglist)
                 if arglist.display:
