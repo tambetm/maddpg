@@ -31,29 +31,32 @@ def train_and_test_timestep(X, y, t):
     clf.fit(X_train, y_train)
 
     # calculate training and test accuracy
-    print(clf.score(X_train, y_train), clf.score(X_test, y_test))
-    return clf
+    return (clf.score(X_train, y_train), clf.score(X_test, y_test)), clf
 
 
 parser = argparse.ArgumentParser()
 parser.add_argument("input_file")
-parser.add_argument("output_file")
+parser.add_argument("model_file")
+parser.add_argument("accuracy_file")
 parser.add_argument("--test_size", type=int, default=100)
 args = parser.parse_args()
 
 data = np.load(args.input_file)
 
 # calculate accuracies and predictions
+acc = np.empty((3, 3, 25, 2))
 models = []
 for i in range(3):
     models.append([])
     for j in range(3):
         models[i].append([])
-        print(i, j, end=' ')
         for t in range(25):
             print(i, j, t, end=' ')
-            clf = train_and_test_timestep(data['X%d_h1' % (i + 1)], data['y%d' % (j + 1)], t)
+            acc[i, j, t], clf = train_and_test_timestep(data['X%d_h1' % (i + 1)], data['y%d' % (j + 1)], t)
             models[i][j].append(clf)
+            print(acc[i, j, t])
 
-with open(args.output_file, "wb") as f:
+np.save(args.accuracy_file, acc)
+
+with open(args.model_file, "wb") as f:
     pickle.dump(models, f)

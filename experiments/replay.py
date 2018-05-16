@@ -38,7 +38,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("npz")
 parser.add_argument("pkl")
 parser.add_argument("--agent", type=int)
-parser.add_argument("--episodes", type=int, default=10)
+parser.add_argument("--episodes", type=int, default=100)
 #parser.add_argument("--fps", type=int, default=20)
 parser.add_argument("--record_video")
 args = parser.parse_args()
@@ -54,9 +54,9 @@ if args.record_video:
 y1 = data['y1']
 y2 = data['y2']
 y3 = data['y3']
-mask1 = np.sum(y1, axis=-1) == 1 
-mask2 = np.sum(y2, axis=-1) == 1 
-mask3 = np.sum(y3, axis=-1) == 1 
+mask1 = np.sum(y1, axis=-1) == 1
+mask2 = np.sum(y2, axis=-1) == 1
+mask3 = np.sum(y3, axis=-1) == 1
 idx = np.logical_and(mask1, np.logical_and(mask2, mask3))
 
 print("Number of episodes where each agent covers one landmark:", np.sum(idx))
@@ -76,6 +76,16 @@ landmark3_pos = X1_obs[:, :, 8:10] + agent1_pos
 X1_h1 = data['X1_h1'][idx]
 X2_h1 = data['X2_h1'][idx]
 X3_h1 = data['X3_h1'][idx]
+
+'''
+for i in range(3):
+    for j in range(3):
+        for t in range(25):
+            #idx = (np.sum(data['y%d' % (j + 1)], axis=-1) == 1)
+            acc = models[i][j][t].score(data['X%d_h1' % (i + 1)][idx, t][-args.episodes:], np.argmax(data['y%d' % (j + 1)][idx][-args.episodes:], axis=-1))
+            print(i, j, t, acc)
+input()
+'''
 
 env = make_env('simple_spread', None, True)
 env.reset()
