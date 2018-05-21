@@ -6,11 +6,11 @@ import time
 import pickle
 import random
 import copy
-
 import maddpg.common.tf_util as U
 from maddpg.trainer.maddpg import MADDPGAgentTrainer
 import tensorflow.contrib.layers as layers
-
+import skvideo.io
+from Video import AddTextToImage,FixPosition
 def parse_args(args=None):
     parser = argparse.ArgumentParser("Reinforcement Learning experiments for multiagent environments")
     # Environment
@@ -41,6 +41,7 @@ def parse_args(args=None):
     parser.add_argument("--plots-dir", type=str, default="./learning_curves/", help="directory where plot data is saved")
     parser.add_argument("--save-replay", action="store_true", default=False, help="save replay memory contents along with benchmark data")
     parser.add_argument("--deterministic", action="store_true", default=False, help="use deterministic policy during benchmarking")
+    parser.add_argument("--record",default=False,help="record video file, Add video path + name to activate")
     return parser.parse_args(args)
 
 def mlp_model(input, num_outputs, scope, reuse=False, num_units=64, rnn_cell=None):
@@ -118,6 +119,8 @@ def train(arglist):
         t_start = time.time()
 
         print('Starting iterations...')
+        if (arglist.record!=False):
+            writer = skvideo.io.FFmpegWriter("{}.avi".format(arglist.record))
         while True:
             # shuffle agents to prevent them from learning fixed strategy
             if not arglist.benchmark and arglist.shuffle == 'timestep':
@@ -130,6 +133,7 @@ def train(arglist):
             done = all(done_n)
             terminal = (episode_step >= arglist.max_episode_len)
             # collect experience
+            #print([ag.state.p_pos for ag in env.agents])
             for i, agent in enumerate(agents):
                 agent.experience(obs_n[i], action_n[i], rew_n[i], new_obs_n[i], done_n[i], terminal)
             obs_n = new_obs_n
@@ -143,10 +147,22 @@ def train(arglist):
 
             # for displaying learned policies
             if arglist.display:
-                time.sleep(0.1)
-                env.render()
+                time.sleep(0.01)
+                x = env.render(mode='rgb_array')
+                if (arglist.record!=False):
+                    LM = [ag.state.p_pos for ag in env.world.landmarks]
+                    LM = [FixPosition(j,10,10) for j in LM]
+                    AP = [ag.state.p_pos for ag in env.agents]
+                    AP = [FixPosition(j) for j in AP]
+                    img = np.copy(x[0])
+                    img = AddTextToImage(img,text=['Agent {}','Agent {}','Agent {}'],color=(0,0,255),pos=AP)
+                    img = AddTextToImage(img,text=['LM{}','LM{}','LM{}'],pos=LM,color=(255,0,0))
+                    writer.writeFrame(img)
 
             if done or terminal:
+                if (arglist.record!=False):
+                    writer.close()
+                    exit()
                 obs_n = env.reset()
                 episode_step = 0
                 episode_rewards.append(0)
