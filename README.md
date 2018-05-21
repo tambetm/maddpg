@@ -1,6 +1,6 @@
 # Do deep reinforcement learning agents model intentions?
 
-This is the code for implementing the intention reading and generalization experiments from the paper:
+This is the code for implementing the intention reading and generalization experiments from the paper
 [Do deep reinforcement learning agents model intentions?](https://arxiv.org/abs/1805.06020).
 It is using the `simple_spread` environment from the
 [Multi-Agent Particle Environments (MPE)](https://github.com/openai/multiagent-particle-envs).
@@ -9,7 +9,7 @@ It is using the `simple_spread` environment from the
 
 - To install, `cd` into the root directory and type `pip install -e .`
 
-- Known dependencies: OpenAI gym, tensorflow, numpy, also Scikit-Learn and Matplotlib for plotting.
+- Known dependencies: OpenAI gym, tensorflow, numpy, also scikit-learn and matplotlib for plotting.
 
 ## Re-running the experiments
 
@@ -40,7 +40,7 @@ by following the `README`.
 - `sheldon.py` - runs evaluation against Sheldon agents (agents with fixed targets)
 - `sheldon_ensemble.py` - runs evaluation against Sheldon agents, for ensemble results
 
-For usage details refer to `experiment.sh` and `experiment_ensemble.sh` and individual files.
+For usage details refer to `experiment.sh`, `experiment_ensemble.sh` and individual files.
 
 ## Paper citation
 
@@ -54,3 +54,7 @@ If you used this code for your experiments or found it helpful, consider citing 
   year={2018}
 }
 </pre>
+
+## Thanks
+
+Thanks to OpenAI for the [original paper](https://arxiv.org/abs/1706.02275) and for releasing [the code](https://github.com/openai/maddpg).
