@@ -1,7 +1,7 @@
-# Do Deep Reinforcement Learning Agents Model Intentions?
+# Do deep reinforcement learning agents model intentions?
 
-This is the code for implementing the intention reading and generalization experiments in the paper:
-[Do Deep Reinforcement Learning Agents Model Intentions?](https://arxiv.org/abs/1805.06020).
+This is the code for implementing the intention reading and generalization experiments from the paper:
+[Do deep reinforcement learning agents model intentions?](https://arxiv.org/abs/1805.06020).
 It is using the `simple_spread` environment from the
 [Multi-Agent Particle Environments (MPE)](https://github.com/openai/multiagent-particle-envs).
 
@@ -16,12 +16,16 @@ It is using the `simple_spread` environment from the
 - Download and install the MPE code [here](https://github.com/openai/multiagent-particle-envs)
 by following the `README`.
 
-- To run the code, `cd` into the `experiments` directory and run `experiment.sh`:
+- To run the code, `cd` into the `experiments` directory and run:
 
-  - ``./experiment.sh coop_navi_0`` - for basic MADDPG agents
-  - ``./experiment.sh coop_navi_shared_0 --shared`` - for MADDPG + shared scheme, all agents use shared model
-  - ``./experiment.sh coop_navi_shuffle_episode_0 --shuffle episode`` - for MADDPG + shuffle scheme, agents are shuffled for each episode
-  - ``./experiment_ensemble.sh coop_navi_ensemble_episode_0 --ensemble-choice episode`` - for MADDPG + ensemble scheme, agents are sampled for each episode
+  - for basic MADDPG agents:  
+  ``./experiment.sh coop_navi_0`` 
+  - for MADDPG + shared scheme, all agents use shared model:  
+  ``./experiment.sh coop_navi_shared_0 --shared``
+  - for MADDPG + shuffle scheme, agents are shuffled for each episode:  
+  ``./experiment.sh coop_navi_shuffle_episode_0 --shuffle episode``
+  - for MADDPG + ensemble scheme, agents are sampled for each episode:  
+  ``./experiment_ensemble.sh coop_navi_ensemble_episode_0 --ensemble-choice episode``
 
 ## Individual scripts
 
@@ -36,7 +40,7 @@ by following the `README`.
 - `sheldon.py` - runs evaluation against Sheldon agents (agents with fixed targets)
 - `sheldon_ensemble.py` - runs evaluation against Sheldon agents, for ensemble results
 
-For usage details refer to `experiment.sh` and `experiment_ensemble.sh` scripts and individual files.
+For usage details refer to `experiment.sh` and `experiment_ensemble.sh` and individual files.
 
 ## Paper citation
 
