@@ -10,8 +10,8 @@ python learning_curve.py learning_curves/${label}_rewards.pkl figures/${label}_l
 python train.py --exp-name ${label}_eval --load-dir policies/${label}/policy --restore --benchmark --save-replay --deterministic $*
 python statistics.py benchmark_files/${label}_eval.pkl >> ${label%_*}.csv
 python prepare.py benchmark_files/${label}_eval.pkl --policy_file policies/${label}/policy --output_file benchmark_files/${label}_eval.npz $*
-python accuracy.py benchmark_files/${label}_eval.npz figures/${label}_accuracy.npy
-python figure.py figures/${label}_accuracy.npy figures/${label}.png
+python figure.py benchmark_files/${label}_eval.npz figures/${label}.png
+#python prepare.py benchmark_files/${label}_eval.pkl $*
 
 python sheldon.py --exp-name ${label}_sheldon12_landmark12 --num-sheldons 2 --sheldon-ids 1 2 --sheldon-targets 1 2  --load-dir policies/${label}/policy --restore --benchmark --save-replay --deterministic $*
 python sheldon.py --exp-name ${label}_sheldon12_landmark02 --num-sheldons 2 --sheldon-ids 1 2 --sheldon-targets 0 2  --load-dir policies/${label}/policy --restore --benchmark --save-replay --deterministic $*
